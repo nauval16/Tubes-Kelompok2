@@ -40,6 +40,15 @@ REGRESSION_FEATURES = [
 CLASSIFICATION_LABEL = "burnout_level"
 REGRESSION_LABEL = "cgpa"
 
+COURSE_MAPPING = {
+    "BBA": 0.167353,
+    "BCA": 0.166487,
+    "BSc": 0.165960,
+    "BTech": 0.165660,
+    "MBA": 0.168207,
+    "MCA": 0.166333
+}
+
 
 @st.cache_data
 def load_dataset():
@@ -125,7 +134,6 @@ def load_selected_model(folder):
         st.stop()
 
     model_names = [os.path.basename(file) for file in model_files]
-
     selected_model_name = st.selectbox("Pilih Model Machine Learning", model_names)
     selected_model_path = model_files[model_names.index(selected_model_name)]
 
@@ -162,7 +170,6 @@ if menu == "Home":
     )
 
     col1, col2, col3 = st.columns(3)
-
     col1.metric("Jumlah Data", f"{df.shape[0]}")
     col2.metric("Jumlah Kolom", f"{df.shape[1]}")
     col3.metric("Jenis Studi Kasus", "Klasifikasi & Regresi")
@@ -204,33 +211,92 @@ elif menu == "Prediksi Mahasiswa":
         col1, col2 = st.columns(2)
 
         with col1:
-            input_data["stress_level"] = st.slider("Stress Level", 1, 10, 5)
-            input_data["sleep_quality"] = st.slider("Sleep Quality", 1, 10, 5)
-            input_data["internet_quality"] = st.slider("Internet Quality", 1, 10, 5)
+            input_data["stress_level"] = st.slider(
+                "Stress Level (1 = Rendah, 10 = Tinggi)",
+                min_value=1,
+                max_value=10,
+                value=5,
+                help="Semakin tinggi nilai, semakin tinggi tingkat stres mahasiswa."
+            )
+
+            input_data["sleep_quality"] = st.slider(
+                "Sleep Quality (1 = Buruk, 10 = Baik)",
+                min_value=1,
+                max_value=10,
+                value=5,
+                help="Semakin tinggi nilai, semakin baik kualitas tidur mahasiswa."
+            )
+
+            input_data["internet_quality"] = st.slider(
+                "Internet Quality (1 = Buruk, 10 = Baik)",
+                min_value=1,
+                max_value=10,
+                value=5,
+                help="Semakin tinggi nilai, semakin baik kualitas koneksi internet mahasiswa."
+            )
 
         with col2:
             input_data["daily_study_hours"] = st.number_input(
-                "Daily Study Hours", min_value=0.0, max_value=24.0, value=3.0, step=0.5
+                "Daily Study Hours",
+                min_value=0.0,
+                max_value=24.0,
+                value=3.0,
+                step=0.5,
+                help="Jumlah jam belajar mahasiswa per hari."
             )
-            input_data["year"] = st.selectbox("Tahun Kuliah", [1, 2, 3, 4])
+
+            input_data["year"] = st.selectbox(
+                "Tahun Kuliah",
+                [1, 2, 3, 4],
+                help="Tahun kuliah mahasiswa saat ini."
+            )
 
     else:
         col1, col2 = st.columns(2)
 
         with col1:
-            input_data["sleep_quality"] = st.slider("Sleep Quality", 1, 10, 5)
-            input_data["daily_study_hours"] = st.number_input(
-                "Daily Study Hours", min_value=0.0, max_value=24.0, value=3.0, step=0.5
+            input_data["sleep_quality"] = st.slider(
+                "Sleep Quality (1 = Buruk, 10 = Baik)",
+                min_value=1,
+                max_value=10,
+                value=5,
+                help="Semakin tinggi nilai, semakin baik kualitas tidur mahasiswa."
             )
+
+            input_data["daily_study_hours"] = st.number_input(
+                "Daily Study Hours",
+                min_value=0.0,
+                max_value=24.0,
+                value=3.0,
+                step=0.5,
+                help="Jumlah jam belajar mahasiswa per hari."
+            )
+
             input_data["daily_sleep_hours"] = st.number_input(
-                "Daily Sleep Hours", min_value=0.0, max_value=24.0, value=7.0, step=0.5
+                "Daily Sleep Hours",
+                min_value=0.0,
+                max_value=24.0,
+                value=7.0,
+                step=0.5,
+                help="Jumlah jam tidur mahasiswa per hari."
             )
 
         with col2:
-            input_data["stress_level"] = st.slider("Stress Level", 1, 10, 5)
-            input_data["course_freq_encode"] = st.number_input(
-                "Course Frequency Encode", min_value=0.0, value=1.0, step=0.1
+            input_data["stress_level"] = st.slider(
+                "Stress Level (1 = Rendah, 10 = Tinggi)",
+                min_value=1,
+                max_value=10,
+                value=5,
+                help="Semakin tinggi nilai, semakin tinggi tingkat stres mahasiswa."
             )
+
+            selected_course = st.selectbox(
+                "Program Studi",
+                list(COURSE_MAPPING.keys()),
+                help="Program studi akan dikonversi otomatis menggunakan Frequency Encoding."
+            )
+
+            input_data["course_freq_encode"] = COURSE_MAPPING[selected_course]
 
     input_df = pd.DataFrame([input_data])
     input_df = input_df[feature_names]
@@ -263,6 +329,7 @@ elif menu == "Prediksi Mahasiswa":
                         "Kategori": [predict_burnout_label(cls) for cls in model.classes_],
                         "Probabilitas": proba
                     })
+
                     st.subheader("📊 Probabilitas Prediksi")
                     st.dataframe(proba_df, use_container_width=True)
 
@@ -301,6 +368,8 @@ elif menu == "Evaluasi Model":
         precision = precision_score(y_true, y_pred, average="weighted", zero_division=0)
         recall = recall_score(y_true, y_pred, average="weighted", zero_division=0)
         f1 = f1_score(y_true, y_pred, average="weighted", zero_division=0)
+
+        st.info(f"Model yang dievaluasi: {selected_model_name}")
 
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("Accuracy", f"{acc:.4f}")
@@ -342,6 +411,8 @@ elif menu == "Evaluasi Model":
         rmse = np.sqrt(mse)
         r2 = r2_score(y_true, y_pred)
 
+        st.info(f"Model yang dievaluasi: {selected_model_name}")
+
         col1, col2, col3, col4 = st.columns(4)
         col1.metric("MAE", f"{mae:.4f}")
         col2.metric("MSE", f"{mse:.4f}")
@@ -352,7 +423,11 @@ elif menu == "Evaluasi Model":
 
         fig, ax = plt.subplots()
         ax.scatter(y_true, y_pred, alpha=0.4)
-        ax.plot([y_true.min(), y_true.max()], [y_true.min(), y_true.max()], linestyle="--")
+        ax.plot(
+            [y_true.min(), y_true.max()],
+            [y_true.min(), y_true.max()],
+            linestyle="--"
+        )
         ax.set_xlabel("Actual CGPA")
         ax.set_ylabel("Predicted CGPA")
         ax.set_title("Actual vs Predicted CGPA")
@@ -446,6 +521,7 @@ elif menu == "Tentang Dataset":
             - daily_study_hours: jumlah jam belajar per hari  
             - daily_sleep_hours: jumlah jam tidur per hari  
             - year: tahun kuliah mahasiswa  
+            - course_freq_encode: hasil Frequency Encoding dari program studi mahasiswa  
             - burnout_level: label klasifikasi tingkat burnout  
             - cgpa: target regresi nilai akademik mahasiswa  
             """
