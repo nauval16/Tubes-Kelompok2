@@ -19,6 +19,10 @@ st.set_page_config(
     layout="wide"
 )
 
+# =========================
+# KONFIGURASI DATASET & FITUR
+# =========================
+
 DATASET_PATH = "student_mental_health_burnout_clean.csv"
 
 CLASSIFICATION_FEATURES = [
@@ -50,6 +54,10 @@ COURSE_MAPPING = {
 }
 
 
+# =========================
+# LOAD DATA DAN MODEL
+# =========================
+
 @st.cache_data
 def load_dataset():
     return pd.read_csv(DATASET_PATH)
@@ -65,6 +73,25 @@ def get_model_files(folder):
     pkl_files = glob.glob(os.path.join(folder, "*.pkl"))
     return joblib_files + pkl_files
 
+
+def load_selected_model(folder):
+    model_files = get_model_files(folder)
+
+    if len(model_files) == 0:
+        st.error(f"Belum ada model di folder `{folder}`.")
+        st.stop()
+
+    model_names = [os.path.basename(file) for file in model_files]
+    selected_model_name = st.selectbox("Pilih Model Machine Learning", model_names)
+    selected_model_path = model_files[model_names.index(selected_model_name)]
+
+    model = load_model(selected_model_path)
+    return model, selected_model_name
+
+
+# =========================
+# FUNCTION BANTUAN
+# =========================
 
 def predict_burnout_label(pred):
     if pred == 0:
@@ -112,6 +139,21 @@ def scale_input(input_df, prediction_type):
         return pd.DataFrame(scaled, columns=REGRESSION_FEATURES)
 
 
+def read_uploaded_file(uploaded_file):
+    file_name = uploaded_file.name.lower()
+
+    if file_name.endswith(".csv"):
+        return pd.read_csv(uploaded_file)
+    elif file_name.endswith(".xlsx") or file_name.endswith(".xls"):
+        return pd.read_excel(uploaded_file)
+    else:
+        raise ValueError("Format file tidak didukung. Gunakan CSV atau Excel.")
+
+
+def validate_columns(data, feature_names):
+    return [col for col in feature_names if col not in data.columns]
+
+
 def show_header():
     st.markdown(
         """
@@ -126,20 +168,9 @@ def show_header():
     )
 
 
-def load_selected_model(folder):
-    model_files = get_model_files(folder)
-
-    if len(model_files) == 0:
-        st.error(f"Belum ada model di folder `{folder}`.")
-        st.stop()
-
-    model_names = [os.path.basename(file) for file in model_files]
-    selected_model_name = st.selectbox("Pilih Model Machine Learning", model_names)
-    selected_model_path = model_files[model_names.index(selected_model_name)]
-
-    model = load_model(selected_model_path)
-    return model, selected_model_name
-
+# =========================
+# HALAMAN UTAMA
+# =========================
 
 show_header()
 
@@ -148,6 +179,7 @@ menu = st.sidebar.radio(
     [
         "Home",
         "Prediksi Mahasiswa",
+        "Prediksi Dataset",
         "Evaluasi Model",
         "Visualisasi Data",
         "Tentang Dataset"
@@ -156,6 +188,10 @@ menu = st.sidebar.radio(
 
 df = load_dataset()
 
+
+# =========================
+# HOME
+# =========================
 
 if menu == "Home":
     st.subheader("📌 Deskripsi Studi Kasus")
@@ -180,10 +216,15 @@ if menu == "Home":
         1. Membangun aplikasi machine learning berbasis web.  
         2. Menyediakan fitur input data oleh pengguna.  
         3. Menampilkan hasil prediksi burnout level dan CGPA.  
-        4. Menampilkan informasi model, evaluasi model, dan visualisasi sederhana.
+        4. Menampilkan informasi model, evaluasi model, dan visualisasi sederhana.  
+        5. Menyediakan fitur prediksi satu data mahasiswa dan prediksi banyak data melalui upload dataset.
         """
     )
 
+
+# =========================
+# PREDIKSI MAHASISWA MANUAL
+# =========================
 
 elif menu == "Prediksi Mahasiswa":
     st.subheader("📝 Prediksi Berdasarkan Input Mahasiswa")
@@ -341,6 +382,125 @@ elif menu == "Prediksi Mahasiswa":
             st.error(f"Terjadi error saat prediksi: {e}")
 
 
+# =========================
+# PREDIKSI DATASET UPLOAD
+# =========================
+
+elif menu == "Prediksi Dataset":
+    st.subheader("📂 Prediksi Banyak Data dari Upload Dataset")
+
+    prediction_choice = st.radio(
+        "Pilih Jenis Prediksi",
+        ["Klasifikasi Burnout Level", "Regresi CGPA"],
+        horizontal=True,
+        key="dataset_prediction_choice"
+    )
+
+    uploaded_file = st.file_uploader(
+        "Upload file CSV atau Excel",
+        type=["csv", "xlsx", "xls"]
+    )
+
+    if uploaded_file is not None:
+        try:
+            data = read_uploaded_file(uploaded_file)
+
+            st.subheader("👀 Preview Dataset")
+            st.dataframe(data.head(), use_container_width=True)
+
+            st.write(f"Jumlah data: {data.shape[0]} baris")
+            st.write(f"Jumlah kolom: {data.shape[1]} kolom")
+
+            if prediction_choice == "Klasifikasi Burnout Level":
+                mode = "Klasifikasi"
+                model, selected_model_name = load_selected_model("model_klasifikasi")
+                feature_names = CLASSIFICATION_FEATURES
+                file_name = "hasil_prediksi_burnout.csv"
+            else:
+                mode = "Regresi"
+                model, selected_model_name = load_selected_model("model_regresi")
+                feature_names = REGRESSION_FEATURES
+                file_name = "hasil_prediksi_cgpa.csv"
+
+            st.info(f"Model yang digunakan: {selected_model_name}")
+
+            missing_cols = validate_columns(data, feature_names)
+
+            if len(missing_cols) > 0:
+                st.error("Kolom pada dataset belum sesuai dengan fitur yang dibutuhkan model.")
+                st.write("Kolom yang belum ada:")
+                st.write(missing_cols)
+
+                st.write("Kolom yang harus ada:")
+                st.write(feature_names)
+
+            else:
+                input_df = data[feature_names].copy()
+
+                for col in feature_names:
+                    input_df[col] = pd.to_numeric(input_df[col], errors="coerce")
+
+                if input_df.isnull().sum().sum() > 0:
+                    st.error(
+                        "Ada nilai kosong atau data non-numerik pada kolom fitur. "
+                        "Silakan cek kembali file dataset."
+                    )
+
+                    missing_value_info = input_df.isnull().sum()
+                    missing_value_info = missing_value_info[missing_value_info > 0]
+
+                    st.write("Jumlah nilai bermasalah per kolom:")
+                    st.write(missing_value_info)
+
+                else:
+                    st.success("Format dataset sudah sesuai. Data siap diprediksi.")
+
+                    st.subheader("📄 Data Fitur yang Digunakan")
+                    st.dataframe(input_df.head(), use_container_width=True)
+
+                    if st.button("🔍 Prediksi Dataset"):
+                        scaled_input = scale_input(input_df, mode)
+                        predictions = model.predict(scaled_input)
+
+                        result_df = data.copy()
+
+                        if mode == "Klasifikasi":
+                            result_df["prediction"] = predictions
+                            result_df["prediction_label"] = [
+                                predict_burnout_label(pred) for pred in predictions
+                            ]
+
+                            if hasattr(model, "predict_proba"):
+                                probabilities = model.predict_proba(scaled_input)
+
+                                if probabilities.shape[1] == 3:
+                                    result_df["probability_low"] = probabilities[:, 0]
+                                    result_df["probability_moderate"] = probabilities[:, 1]
+                                    result_df["probability_high"] = probabilities[:, 2]
+
+                        else:
+                            result_df["prediction_cgpa"] = predictions
+
+                        st.subheader("🎯 Hasil Prediksi Dataset")
+                        st.dataframe(result_df, use_container_width=True)
+
+                        csv_result = result_df.to_csv(index=False).encode("utf-8")
+
+                        st.download_button(
+                            label="Download Hasil Prediksi",
+                            data=csv_result,
+                            file_name=file_name,
+                            mime="text/csv"
+                        )
+
+        except Exception as e:
+            st.error(f"File gagal diproses: {e}")
+
+
+# =========================
+# EVALUASI MODEL
+# =========================
+
 elif menu == "Evaluasi Model":
     st.subheader("📈 Evaluasi Model")
 
@@ -439,6 +599,10 @@ elif menu == "Evaluasi Model":
         )
 
 
+# =========================
+# VISUALISASI DATA
+# =========================
+
 elif menu == "Visualisasi Data":
     st.subheader("📊 Visualisasi Sederhana Dataset")
 
@@ -490,6 +654,10 @@ elif menu == "Visualisasi Data":
         ax.set_title("Distribusi Stress Level")
         st.pyplot(fig)
 
+
+# =========================
+# TENTANG DATASET
+# =========================
 
 elif menu == "Tentang Dataset":
     st.subheader("📚 Tentang Dataset")
