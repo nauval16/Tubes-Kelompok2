@@ -767,11 +767,11 @@ elif menu == "Biodata Kelompok":
     )
 
     # Foto kelompok
-    if os.path.exists("foto_kelompok.JPEG"):
+    if os.path.exists("foto_kelompok.jpeg"):
         col_kiri, col_tengah, col_kanan = st.columns([1, 2, 1])
         with col_tengah:
             st.image(
-                "foto_kelompok.JPEG",
+                "foto_kelompok.jpeg",
                 caption="Kelompok 2 — SIKC - Fakultas Ilmu Terapan, Telkom University",
                 use_container_width=True
             )
